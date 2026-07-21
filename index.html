@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The World of Samuel Pepys · A Network Over Time</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="title-block">
+      <h1>The World of Samuel Pepys</h1>
+      <p class="subtitle">His social network as it grows through the diary, 1664&ndash;1667</p>
+    </div>
+    <div id="stats">
+      <div class="stat"><span class="num" id="stat-date">&mdash;</span><span class="lbl">Date</span></div>
+      <div class="stat"><span class="num" id="stat-people">0</span><span class="lbl">People</span></div>
+      <div class="stat"><span class="num" id="stat-links">0</span><span class="lbl">Connections</span></div>
+      <div class="stat"><span class="num" id="stat-groups">0</span><span class="lbl">Gatherings</span></div>
+    </div>
+  </header>
+
+  <main id="stage">
+    <svg id="graph"></svg>
+    <div id="modebar">
+      <span class="mode-label">View</span>
+      <div class="seg">
+        <button id="mode-people" class="mode-btn active">People</button>
+        <button id="mode-two" class="mode-btn">People + Events</button>
+      </div>
+    </div>
+    <div id="legend">
+      <div class="legend-title">First appears in</div>
+      <div class="legend-row"><span class="sw" style="background:#5b8ff9"></span>1664</div>
+      <div class="legend-row"><span class="sw" style="background:#61ddaa"></span>1665</div>
+      <div class="legend-row"><span class="sw" style="background:#82dd61"></span>1666</div>
+      <div class="legend-row"><span class="sw" style="background:#e84ad0"></span>1667</div>
+      <div class="legend-row" id="legend-event"><span class="sw sq" style="background:#c9c2b0"></span>Gathering (event)</div>
+    </div>
+    <div id="leaderboard">
+      <div class="lb-title" id="lb-title">Most connected</div>
+      <ol class="lb-list" id="lb-list"></ol>
+    </div>
+    <div id="hint">Press <strong>Play</strong> or drag the slider to watch the network form.</div>
+    <div id="tooltip" class="hidden"></div>
+  </main>
+
+  <section id="chapters">
+    <span class="jump-label">Jump to&nbsp;</span>
+    <div id="chapter-buttons"></div>
+  </section>
+
+  <footer id="controls">
+    <button id="play" class="primary" title="Play / pause">
+      <span class="icon-play">&#9654;</span><span class="icon-pause">&#10073;&#10073;</span>
+      <span class="btn-text">Play</span>
+    </button>
+    <button id="reset" title="Back to an empty network">&#8634; Reset</button>
+    <div class="slider-wrap">
+      <input type="range" id="slider" min="0" max="100" value="0" step="1">
+      <div id="ticks"></div>
+    </div>
+    <label class="knob">
+      <span>Spread <b id="spread-val">5&times;</b></span>
+      <input type="range" id="spread" class="mini-range" min="1" max="8" step="0.5" value="5">
+    </label>
+    <label class="speed">
+      Speed
+      <select id="speed">
+        <option value="1">Slow</option>
+        <option value="2" selected>Normal</option>
+        <option value="4">Fast</option>
+        <option value="8">Very fast</option>
+      </select>
+    </label>
+  </footer>
+</div>
+
+<script src="d3.v7.min.js"></script>
+<script src="network_data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

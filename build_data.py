@@ -161,7 +161,7 @@ def radius_of(coords):
 components = sorted(nx.connected_components(G), key=len, reverse=True)
 
 # extra separation between disconnected components (in hop-units)
-COMPONENT_GAP = 5.0
+COMPONENT_GAP = 10
 
 positions = {}     # person -> (x, y) in the shared hop-space
 

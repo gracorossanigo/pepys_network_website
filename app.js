@@ -56,9 +56,19 @@
   const allEvents = [...eById.values()];
 
   // ---- colour / size --------------------------------------------------------
+  // Node fills are the one thing CSS can't set for us (d3 writes the `fill`
+  // attribute), so they're read out of the same custom properties the legend
+  // uses — style.css stays the single source of truth for the palette.
   const YEARS = [1664, 1665, 1666, 1667];
-  const YEAR_COLOR = { 1664: "#5b8ff9", 1665: "#61ddaa", 1666: "#16f62c", 1667: "#e84ab3" };
-  const colorFor = (d) => YEAR_COLOR[d.firstYear] || "#9aa0b5";
+  const YEAR_COLOR = {};
+  function readPalette() {
+    const css = getComputedStyle(document.documentElement);
+    const token = (name) => css.getPropertyValue(name).trim();
+    YEARS.forEach((y, i) => { YEAR_COLOR[y] = token(`--year-${i + 1}`); });
+    YEAR_COLOR.other = token("--year-other");
+  }
+  readPalette();
+  const colorFor = (d) => YEAR_COLOR[d.firstYear] || YEAR_COLOR.other;
   // gentle size encoding — sqrt already compresses; small multiplier keeps the
   // busiest hubs from dwarfing everyone else
   const radiusFor = (d) => d.kind === "event"
@@ -430,7 +440,9 @@
   // ---- leaderboard: the top 10 nodes at the current moment -------------------
   const lbList = document.getElementById("lb-list");
   const lbTitle = document.getElementById("lb-title");
+  let lbNodes = [];
   function updateLeaderboard(nodes) {
+    lbNodes = nodes;
     lbTitle.textContent = mode === "people" ? "Most connected" : "Most present";
     if (!nodes.length) { lbList.innerHTML = '<li class="lb-empty">Nobody yet</li>'; return; }
     const top = nodes.slice()
@@ -563,6 +575,15 @@
     t.style.left = (k / N * 100) + "%";
     t.textContent = y;
     ticksWrap.appendChild(t);
+  });
+
+  // ---- theme ----------------------------------------------------------------
+  // Everything else re-colours itself through CSS; only the fills we wrote by
+  // hand need repainting (see readPalette).
+  window.addEventListener("themechange", () => {
+    readPalette();
+    nodeSel.attr("fill", colorFor);
+    updateLeaderboard(lbNodes);
   });
 
   // ---- resize ---------------------------------------------------------------

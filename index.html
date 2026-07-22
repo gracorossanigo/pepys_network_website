@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The World of Samuel Pepys · A Network Over Time</title>
+<!-- Stamp the theme before first paint so the page never flashes the wrong one. -->
+<script>
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem("pepys-theme"); } catch (e) {}
+    var osLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+    document.documentElement.dataset.theme = saved || (osLight ? "light" : "dark");
+  })();
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,11 +22,16 @@
       <h1>Samuel Pepys' Network</h1>
       <p class="subtitle">An interactive visualization of the growth of his personal network over time.</p>
     </div>
-    <div id="stats">
-      <div class="stat"><span class="num" id="stat-date">&mdash;</span><span class="lbl">Date</span></div>
-      <div class="stat"><span class="num" id="stat-people">0</span><span class="lbl">People</span></div>
-      <div class="stat"><span class="num" id="stat-links">0</span><span class="lbl">Connections</span></div>
-      <div class="stat"><span class="num" id="stat-groups">0</span><span class="lbl">Gatherings</span></div>
+    <div class="topbar-right">
+      <div id="stats">
+        <div class="stat"><span class="num" id="stat-date">&mdash;</span><span class="lbl">Date</span></div>
+        <div class="stat"><span class="num" id="stat-people">0</span><span class="lbl">People</span></div>
+        <div class="stat"><span class="num" id="stat-links">0</span><span class="lbl">Connections</span></div>
+        <div class="stat"><span class="num" id="stat-groups">0</span><span class="lbl">Gatherings</span></div>
+      </div>
+      <button id="theme-toggle" title="Switch between light and dark">
+        <span class="to-light">&#9728;</span><span class="to-dark">&#9790;</span>
+      </button>
     </div>
   </header>
 
@@ -32,11 +46,11 @@
     </div>
     <div id="legend">
       <div class="legend-title">First appears in</div>
-      <div class="legend-row"><span class="sw" style="background:#5b8ff9"></span>1664</div>
-      <div class="legend-row"><span class="sw" style="background:#61ddaa"></span>1665</div>
-      <div class="legend-row"><span class="sw" style="background:#82dd61"></span>1666</div>
-      <div class="legend-row"><span class="sw" style="background:#e84ad0"></span>1667</div>
-      <div class="legend-row" id="legend-event"><span class="sw sq" style="background:#c9c2b0"></span>Gathering (event)</div>
+      <div class="legend-row"><span class="sw year-1"></span>1664</div>
+      <div class="legend-row"><span class="sw year-2"></span>1665</div>
+      <div class="legend-row"><span class="sw year-3"></span>1666</div>
+      <div class="legend-row"><span class="sw year-4"></span>1667</div>
+      <div class="legend-row" id="legend-event"><span class="sw sq event"></span>Gathering (event)</div>
     </div>
     <div id="leaderboard">
       <div class="lb-title" id="lb-title">Most connected</div>
@@ -77,6 +91,7 @@
   </footer>
 </div>
 
+<script src="theme.js"></script>
 <script src="d3.v7.min.js"></script>
 <script src="network_data.js"></script>
 <script src="app.js"></script>

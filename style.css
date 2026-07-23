@@ -185,7 +185,8 @@ body.two-mode #legend-event { opacity: 1; }
 
 #modebar {
   position: absolute; top: 14px; right: 14px; z-index: 6;
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px 10px;
+  flex-wrap: wrap; justify-content: flex-end; max-width: min(60vw, 620px);
   background: var(--overlay); border: 1px solid var(--border);
   border-radius: 10px; padding: 8px 10px; backdrop-filter: blur(3px);
 }

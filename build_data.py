@@ -160,6 +160,14 @@ def radius_of(coords):
 
 components = sorted(nx.connected_components(G), key=len, reverse=True)
 
+# Rank every person by which component they belong to: 0 = the giant (main) component,
+# 1 = the second-biggest, and so on. The website uses this for its "All / Main / Two
+# biggest" component filter, so the ranking must match the largest-first order here.
+comp_rank = {}
+for rank, comp in enumerate(components):
+    for person in comp:
+        comp_rank[person] = rank
+
 # extra separation between disconnected components (in hop-units)
 COMPONENT_GAP = 10
 
@@ -221,6 +229,7 @@ for person in sorted(first_seen, key=lambda p: (first_seen[p], p)):
         "first": first_seen[person].isoformat(),
         "count": appearances[person],
         "degree": degree.get(person, 0),
+        "comp": comp_rank[person],
         "px": px, "py": py,
     })
 
@@ -257,6 +266,7 @@ data = {
         "groups": n_groups,
         "edges": len(pair_weight),
         "components": len(components),
+        "componentSizes": [len(c) for c in components],
         "chapters": chapters,
     },
     "nodes": nodes,

@@ -28,6 +28,7 @@
       id: n.id, kind: "person",
       first: n.first, firstYear: +n.first.slice(0, 4),
       count: n.count, degreeFull: n.degree,
+      comp: n.comp == null ? 0 : n.comp,   // 0 = main component, 1 = 2nd biggest, …
       px: n.px, py: n.py, x: 0, y: 0, ax: 0, ay: 0, cur: 0, placed: false,
     });
   }
@@ -53,17 +54,28 @@
   // People the user has taken out of the network. Empty === the full network.
   const removed = new Set();
 
+  // Component filter (whole-network basis): show only the largest component(s).
+  // compScope is the highest component rank kept — 0 = main component only, 1 = the two
+  // biggest, Infinity = all. Ranks come from build_data.py (0 = giant). Because everyone
+  // in a shared gathering is in the same component, a gathering is always wholly kept or
+  // wholly dropped by this filter, so it folds cleanly into refreshDerived() below.
+  let compScope = Infinity;
+  function inScope(id) {
+    const o = byId.get(id);
+    return !o || o.comp == null || o.comp <= compScope;
+  }
+
   // Recompute every gathering's surviving guest list and each day's person-person
   // pairs from `removed`. Runs once at startup and again whenever `removed`
   // changes; the persistent event objects (and their positions) stay put.
   function refreshDerived() {
-    const on = removed.size > 0;
+    const on = removed.size > 0 || compScope !== Infinity;
     events.forEach((ev) => {
       ev.pairs = [];
       const seen = new Set();
       for (const g of ev.groups) {
         const e = eById.get(g.i);
-        const m = on ? g.m.filter((p) => !removed.has(p)) : g.m;
+        const m = on ? g.m.filter((p) => !removed.has(p) && inScope(p)) : g.m;
         e.members = m;
         e.size = m.length;
         // A gathering only goes "orphaned" if a removal shrank it below two
@@ -637,6 +649,28 @@
   btnPeople.addEventListener("click", () => setMode("people"));
   btnTwo.addEventListener("click", () => setMode("two"));
 
+  // ---- component-scope toggle (All / Main only / Two biggest) ----------------
+  const COMP_SCOPE = { all: Infinity, main: 0, top2: 1 };
+  const compBtns = {
+    all: document.getElementById("comp-all"),
+    main: document.getElementById("comp-main"),
+    top2: document.getElementById("comp-top2"),
+  };
+  function setCompScope(key, refit) {
+    const v = COMP_SCOPE[key];
+    if (v === undefined || v === compScope) return;
+    compScope = v;
+    for (const k in compBtns) compBtns[k].classList.toggle("active", k === key);
+    refreshDerived();          // re-derive gatherings/pairs under the new filter
+    measure();                 // gathering anchors depend on their live membership
+    hovered = null; clearHighlight(); tooltip.classed("hidden", true);
+    rebuild(index, true);
+    if (refit !== false) requestFit(true);
+  }
+  compBtns.all.addEventListener("click", () => setCompScope("all"));
+  compBtns.main.addEventListener("click", () => setCompScope("main"));
+  compBtns.top2.addEventListener("click", () => setCompScope("top2"));
+
   // ---- spread control -------------------------------------------------------
   const spreadInput = document.getElementById("spread");
   const spreadVal = document.getElementById("spread-val");
@@ -720,6 +754,8 @@
   const sp = /(?:^#|&)spread=([\d.]+)/.exec(location.hash);
   if (sp) SPREAD = Math.max(1, Math.min(8, +sp[1]));
   if (/(?:^#|&)mode=two/.test(location.hash)) setMode("two");
+  const cm = /(?:^#|&)comp=(all|main|top2)/.exec(location.hash);
+  if (cm && cm[1] !== "all") setCompScope(cm[1], false);   // sets filter before first fit
   applySpread(SPREAD, false);
   rebuild(start, start > 0);
   requestFit(false);   // frame it once the initial layout has settled

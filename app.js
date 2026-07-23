@@ -33,27 +33,55 @@
   }
 
   // ---- persistent event objects + per-day one-mode pairs --------------------
+  // Each gathering keeps its full guest list in `membersFull`; `members` is the
+  // list actually shown, which drops anyone the user has removed from the network
+  // (see `removed`). A gathering left with fewer than two guests is "orphaned"
+  // and goes dark (alive === false): it contributes no node, no attendance link
+  // and no person-person pair.
   const eById = new Map();
-  const nodeFirstIndex = new Map();
   events.forEach((ev, i) => {
-    ev.pairs = [];
-    const seen = new Set();
     for (const g of ev.groups) {
       eById.set(g.i, {
-        id: g.i, kind: "event", date: ev.date, members: g.m,
+        id: g.i, kind: "event", date: ev.date, membersFull: g.m, members: g.m,
         size: g.m.length, dayIndex: i, x: 0, y: 0, ax: 0, ay: 0, cur: g.m.length,
+        alive: true,
       });
-      for (const p of g.m) if (!nodeFirstIndex.has(p)) nodeFirstIndex.set(p, i);
-      const m = g.m;
-      for (let a = 0; a < m.length; a++) {
-        for (let b = a + 1; b < m.length; b++) {
-          const key = m[a] < m[b] ? m[a] + "" + m[b] : m[b] + "" + m[a];
-          if (!seen.has(key)) { seen.add(key); ev.pairs.push([m[a], m[b], key]); }
-        }
-      }
     }
   });
   const allEvents = [...eById.values()];
+
+  // People the user has taken out of the network. Empty === the full network.
+  const removed = new Set();
+
+  // Recompute every gathering's surviving guest list and each day's person-person
+  // pairs from `removed`. Runs once at startup and again whenever `removed`
+  // changes; the persistent event objects (and their positions) stay put.
+  function refreshDerived() {
+    const on = removed.size > 0;
+    events.forEach((ev) => {
+      ev.pairs = [];
+      const seen = new Set();
+      for (const g of ev.groups) {
+        const e = eById.get(g.i);
+        const m = on ? g.m.filter((p) => !removed.has(p)) : g.m;
+        e.members = m;
+        e.size = m.length;
+        // A gathering only goes "orphaned" if a removal shrank it below two
+        // guests; gatherings the removal never touched are left exactly as they
+        // were (the data has 24 legitimate one-guest gatherings — Pepys seeing
+        // someone alone — that must survive when nobody has been removed).
+        e.alive = m.length === g.m.length ? m.length >= 1 : m.length >= 2;
+        if (!e.alive) continue;
+        for (let a = 0; a < m.length; a++) {
+          for (let b = a + 1; b < m.length; b++) {
+            const key = m[a] < m[b] ? m[a] + "" + m[b] : m[b] + "" + m[a];
+            if (!seen.has(key)) { seen.add(key); ev.pairs.push([m[a], m[b], key]); }
+          }
+        }
+      }
+    });
+  }
+  refreshDerived();
 
   // ---- colour / size --------------------------------------------------------
   // Node fills are the one thing CSS can't set for us (d3 writes the `fill`
@@ -99,8 +127,10 @@
     const side = Math.min(W, H) - 2 * m;          // uniform square keeps distances honest
     const ox = (W - side) / 2, oy = (H - side) / 2;
     for (const d of byId.values()) { d.ax = ox + d.px * side; d.ay = oy + d.py * side; }
-    // an event sits at the centroid of the people who attended it
+    // an event sits at the centroid of the people who attended it (its live
+    // membership — an orphaned gathering may have been emptied out entirely)
     for (const e of eById.values()) {
+      if (!e.members.length) continue;
       let sx = 0, sy = 0;
       for (const p of e.members) { const o = byId.get(p); sx += o.ax; sy += o.ay; }
       e.ax = sx / e.members.length; e.ay = sy / e.members.length;
@@ -158,11 +188,20 @@
   function applySpreadForce() {
     const two = mode === "two";
     if (two) {
-      // anchored two-mode: people held near their KK spot, events follow attendees
-      charge.strength((d) => d.kind === "event" ? -4 : -(6 + SPREAD * SPREAD * 2))
-        .distanceMax(70 + SPREAD * 30);
-      anchorX.strength((d) => d.kind === "event" ? 0 : 0.45);
-      anchorY.strength((d) => d.kind === "event" ? 0 : 0.45);
+      // Anchored two-mode: people held near their KK spot, events follow attendees.
+      // Events now repel about as hard as people (they used to be charge -4, i.e.
+      // basically inert) — and because many-body charge is pairwise across every
+      // node, those event squares also shove the surrounding people outward, so the
+      // cloud inflates to a spread comparable to the People view instead of
+      // collapsing onto the dense KK core. distanceMax is widened to match so the
+      // repulsion actually reaches across the core, and the anchor is eased a touch
+      // to give it room while still holding the distance-tied structure.
+      charge.strength((d) => d.kind === "event"
+          ? -(8 + SPREAD * SPREAD * 2)
+          : -(8 + SPREAD * SPREAD * 2.4))
+        .distanceMax(180 + SPREAD * 44);
+      anchorX.strength((d) => d.kind === "event" ? 0 : 0.36);
+      anchorY.strength((d) => d.kind === "event" ? 0 : 0.36);
       gravityX.strength(0); gravityY.strength(0);
     } else {
       // spring embedder: repulsion + uniform springs + light gravity
@@ -227,24 +266,30 @@
   let hovered = null;
 
   function stateAt(k) {
+    // Only surviving (alive) gatherings put people on the stage, so anyone who
+    // was left stranded once a removed person emptied out their gatherings simply
+    // never becomes active — the orphan cascade falls straight out of this.
     const activePeople = new Set();
     for (let i = 0; i < k; i++)
-      for (const g of events[i].groups)
-        for (const p of g.m) activePeople.add(p);
+      for (const g of events[i].groups) {
+        const e = eById.get(g.i);
+        if (!e.alive) continue;
+        for (const p of e.members) activePeople.add(p);
+      }
 
     if (mode === "people") {
       const pairWeight = new Map(), pairEnds = new Map();
       for (let i = 0; i < k; i++) {
-        for (const [a, b, key] of events[i].pairs) {
+        for (const [a, b, key] of events[i].pairs) {   // pairs already drop removed/orphaned
           pairWeight.set(key, (pairWeight.get(key) || 0) + 1);
           if (!pairEnds.has(key)) pairEnds.set(key, [a, b]);
         }
       }
       return { activePeople, pairWeight, pairEnds };
     }
-    // two-mode: events whose day has occurred, plus person-event attendance links
+    // two-mode: alive events whose day has occurred, plus attendance links
     const activeEvents = [];
-    for (const e of allEvents) if (e.dayIndex < k) activeEvents.push(e);
+    for (const e of allEvents) if (e.alive && e.dayIndex < k) activeEvents.push(e);
     return { activePeople, activeEvents };
   }
 
@@ -400,7 +445,8 @@
       html = `<div class="tt-name">${prettyName(d.id)}</div>` +
         `<div class="tt-row">First appears ${fmtDate(d.first)}</div>` +
         `<div class="tt-row">${d.cur} ${unit}${d.cur === 1 ? "" : "s"} so far · ` +
-        `${d.count} gathering${d.count === 1 ? "" : "s"} total</div>`;
+        `${d.count} gathering${d.count === 1 ? "" : "s"} total</div>` +
+        `<div class="tt-hint">Click to remove from the network</div>`;
     }
     tooltip.classed("hidden", false).html(html);
     moveTip(event);
@@ -411,10 +457,28 @@
   }
 
   function dragBehavior() {
+    // A near-stationary press (as opposed to a real drag) on a person node is a
+    // click: it removes that person from the network. We measure travel in screen
+    // pixels off the source event so zoom level doesn't change the threshold.
+    let downX = 0, downY = 0, moved = false;
     return d3.drag()
-      .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-      .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
-      .on("end", (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; });
+      .on("start", (e, d) => {
+        moved = false;
+        const se = e.sourceEvent;
+        if (se) { downX = se.clientX; downY = se.clientY; }
+        if (!e.active) sim.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+      })
+      .on("drag", (e, d) => {
+        const se = e.sourceEvent;
+        if (se && Math.hypot(se.clientX - downX, se.clientY - downY) > 4) moved = true;
+        d.fx = e.x; d.fy = e.y;
+      })
+      .on("end", (e, d) => {
+        if (!e.active) sim.alphaTarget(0);
+        d.fx = null; d.fy = null;
+        if (!moved && d.kind === "person") removePerson(d.id);
+      });
   }
 
   // ---- readouts -------------------------------------------------------------
@@ -430,7 +494,8 @@
     elLinks.textContent = nLinks;
     linkLbl.textContent = mode === "people" ? "Connections" : "Attendances";
     let g = 0;
-    for (let i = 0; i < k; i++) g += events[i].groups.length;
+    for (let i = 0; i < k; i++)
+      for (const grp of events[i].groups) if (eById.get(grp.i).alive) g++;   // orphaned gatherings drop out
     elGroups.textContent = g;
     slider.value = k;
     document.getElementById("hint").classList.toggle("gone", k !== 0);
@@ -448,12 +513,16 @@
     const top = nodes.slice()
       .sort((a, b) => b.cur - a.cur || b.degreeFull - a.degreeFull)
       .slice(0, 10);
-    lbList.innerHTML = top.map((d, i) =>
-      `<li data-id="${d.id.replace(/"/g, "&quot;")}">` +
-      `<span class="lb-rank">${i + 1}</span>` +
-      `<span class="lb-dot" style="background:${colorFor(d)}"></span>` +
-      `<span class="lb-name">${prettyName(d.id)}</span>` +
-      `<span class="lb-val">${d.cur}</span></li>`).join("");
+    lbList.innerHTML = top.map((d, i) => {
+      const safe = d.id.replace(/"/g, "&quot;");
+      return `<li data-id="${safe}">` +
+        `<span class="lb-rank">${i + 1}</span>` +
+        `<span class="lb-dot" style="background:${colorFor(d)}"></span>` +
+        `<span class="lb-name">${prettyName(d.id)}</span>` +
+        `<span class="lb-val">${d.cur}</span>` +
+        `<button class="lb-remove" data-remove="${safe}" title="Remove ${prettyName(d.id)} from the network">&times;</button>` +
+        `</li>`;
+    }).join("");
   }
   // hovering a leaderboard row highlights that actor in the graph
   lbList.addEventListener("mouseover", (e) => {
@@ -461,6 +530,57 @@
     if (li) highlightId(li.getAttribute("data-id"));
   });
   lbList.addEventListener("mouseleave", () => { hovered = null; clearHighlight(); });
+  // the "×" on a row takes that person out of the network
+  lbList.addEventListener("click", (e) => {
+    const btn = e.target.closest(".lb-remove");
+    if (btn) { e.stopPropagation(); removePerson(btn.getAttribute("data-remove")); }
+  });
+
+  // ---- removal: take a person out of the network and re-derive ---------------
+  // Removing a person strips them from every gathering (never deleting the
+  // gathering outright) and then drops any gathering left with a single guest —
+  // that lone guest can in turn disappear if they had no other gathering, so the
+  // orphan removal cascades naturally through refreshDerived()/stateAt().
+  const removedPanel = document.getElementById("removed-panel");
+  const removedList = document.getElementById("removed-list");
+
+  function applyRemovalChange() {
+    refreshDerived();
+    measure();                 // gathering anchors depend on their live membership
+    renderRemovedPanel();
+    hovered = null; clearHighlight(); tooltip.classed("hidden", true);
+    rebuild(index, true);
+    requestFit(true);
+  }
+  function removePerson(id) {
+    if (!id || removed.has(id)) return;
+    removed.add(id);
+    applyRemovalChange();
+  }
+  function restorePerson(id) {
+    if (!removed.delete(id)) return;
+    applyRemovalChange();
+  }
+  function restoreAll() {
+    if (!removed.size) return;
+    removed.clear();
+    applyRemovalChange();
+  }
+  function renderRemovedPanel() {
+    if (!removed.size) { removedPanel.classList.add("gone"); removedList.innerHTML = ""; return; }
+    removedPanel.classList.remove("gone");
+    const chips = [...removed].sort().map((id) => {
+      const safe = id.replace(/"/g, "&quot;");
+      return `<li><span class="rm-name">${prettyName(id)}</span>` +
+        `<button class="rm-restore" data-restore="${safe}" title="Put ${prettyName(id)} back">&times;</button></li>`;
+    }).join("");
+    removedList.innerHTML = chips;
+  }
+  removedList.addEventListener("click", (e) => {
+    const btn = e.target.closest(".rm-restore");
+    if (btn) restorePerson(btn.getAttribute("data-restore"));
+  });
+  document.getElementById("restore-all").addEventListener("click", restoreAll);
 
   // ---- formatting -----------------------------------------------------------
   const MONTHS = ["January", "February", "March", "April", "May", "June", "July",

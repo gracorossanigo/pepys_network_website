@@ -36,9 +36,9 @@
      Validated as an ordinal ramp (monotone lightness, ΔL >= 0.06, hue spread
      3 degrees, darkest step 4.1:1 against --bg). Keep it a ramp when editing. */
   --year-1:         #3474d4;
-  --year-2:         #5b96e8;
-  --year-3:         #8ab6f2;
-  --year-4:         #b8d4fa;
+  --year-2:         #a95be8;
+  --year-3:         #f28a8a;
+  --year-4:         #ccfab8;
   --year-other:     #7d8aa5;   /* a person outside the four diary years        */
   --event:          #a880f0;   /* gatherings — squares, so hue + shape differ  */
 
@@ -76,10 +76,10 @@
   --shadow:         0 6px 24px rgba(20, 32, 58, .18);
 
   /* data — same ramp re-stepped for a light surface (lightest step 2.2:1) */
-  --year-1:         #85ace8;
-  --year-2:         #4f88db;
-  --year-3:         #2a5fb4;
-  --year-4:         #193f80;
+  --year-1:         #3474d4;
+  --year-2:         #a95be8;
+  --year-3:         #f28a8a;
+  --year-4:         #88c271;
   --year-other:     #5f6b85;
   --event:          #7b4fd0;
 
@@ -220,9 +220,47 @@ body.two-mode #legend-event { opacity: 1; }
 .lb-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lb-val { color: var(--emphasis); font-variant-numeric: tabular-nums; font-weight: 600; }
 .lb-empty { color: var(--text-muted); font-style: italic; font-size: 12px; padding: 3px 4px; }
+/* the per-row remove button stays out of the way until you hover the row */
+.lb-remove {
+  flex: 0 0 auto; width: 16px; height: 16px; padding: 0; margin-left: 2px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: transparent;
+  color: var(--text-muted); font-size: 15px; line-height: 1; cursor: pointer;
+  opacity: 0; transition: opacity .12s, color .12s, background .12s;
+}
+.lb-list li:hover .lb-remove { opacity: 1; }
+.lb-remove:hover { color: var(--on-accent); background: var(--accent); border-color: transparent; }
 
 /* modebar shifts left so it doesn't collide with the leaderboard */
 #modebar { right: 238px; }
+
+/* ---- removed-from-network panel ------------------------------------------- */
+#removed-panel {
+  position: absolute; left: 14px; bottom: 14px; z-index: 6; width: 210px;
+  background: var(--overlay); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px; backdrop-filter: blur(3px);
+}
+#removed-panel.gone { display: none; }
+.rm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.rm-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+#restore-all {
+  padding: 3px 9px; font-size: 11px; border-radius: 14px;
+  background: var(--surface-raised); color: var(--text); border: 1px solid var(--border);
+}
+#restore-all:hover { border-color: var(--accent); color: var(--accent); }
+.rm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; max-height: 168px; overflow-y: auto; }
+.rm-list li {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: 14px; padding: 3px 6px 3px 10px; font-size: 12px; line-height: 1.3;
+}
+.rm-name { white-space: nowrap; }
+.rm-restore {
+  width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--text-muted); font-size: 15px; line-height: 1; cursor: pointer;
+}
+.rm-restore:hover { background: var(--accent); color: var(--on-accent); }
 
 #tooltip {
   position: absolute; pointer-events: none; z-index: 10;
@@ -233,6 +271,7 @@ body.two-mode #legend-event { opacity: 1; }
 }
 #tooltip .tt-name { font-weight: 600; color: var(--emphasis); margin-bottom: 2px; }
 #tooltip .tt-row { color: var(--text-muted); font-size: 12px; }
+#tooltip .tt-hint { margin-top: 4px; color: var(--accent); font-size: 11px; font-style: italic; }
 #tooltip.hidden { display: none; }
 
 /* ---- chapters ------------------------------------------------------------- */

@@ -48,14 +48,29 @@
         <button id="comp-all" class="mode-btn active" title="Show every connected component">All</button>
         <button id="comp-main" class="mode-btn" title="Show only the largest connected component">Main only</button>
         <button id="comp-top2" class="mode-btn" title="Show only the two largest components">Two biggest</button>
+        <button id="comp-min4" class="mode-btn" title="Show only components with 4 or more people">4+ people</button>
+      </div>
+      <span class="mode-label">Colour</span>
+      <div class="seg">
+        <button id="color-year" class="mode-btn active" title="Colour people by the year they first appear">Year</button>
+        <button id="color-clus" class="mode-btn" title="One-mode clustering: of a person's direct contacts, the share who also know each other (people projection)">Clustering</button>
+        <button id="color-clus2" class="mode-btn" title="Two-mode (bipartite) clustering, Latapy et al. — overlap of the gatherings a person attends with those of the people they meet. Matches the UCINET/NetDraw attribute files.">Bipartite</button>
       </div>
     </div>
     <div id="legend">
-      <div class="legend-title">First appears in</div>
-      <div class="legend-row"><span class="sw year-1"></span>1664</div>
-      <div class="legend-row"><span class="sw year-2"></span>1665</div>
-      <div class="legend-row"><span class="sw year-3"></span>1666</div>
-      <div class="legend-row"><span class="sw year-4"></span>1667</div>
+      <div id="legend-year">
+        <div class="legend-title">First appears in</div>
+        <div class="legend-row"><span class="sw year-1"></span>1664</div>
+        <div class="legend-row"><span class="sw year-2"></span>1665</div>
+        <div class="legend-row"><span class="sw year-3"></span>1666</div>
+        <div class="legend-row"><span class="sw year-4"></span>1667</div>
+      </div>
+      <div id="legend-clustering">
+        <div class="legend-title" id="clus-legend-title">Clustering coefficient</div>
+        <div class="clus-bar"></div>
+        <div class="clus-scale"><span id="clus-tick-lo">0</span><span id="clus-tick-mid">0.5</span><span id="clus-tick-hi">1</span></div>
+        <div class="legend-note" id="clus-legend-note">People ranked least &rarr; most clustered; even-sized colour bands. Labels: lowest &middot; median &middot; highest.</div>
+      </div>
       <div class="legend-row" id="legend-event"><span class="sw sq event"></span>Gathering (event)</div>
     </div>
     <div id="leaderboard">

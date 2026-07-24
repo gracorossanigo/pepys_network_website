@@ -28,6 +28,8 @@
       id: n.id, kind: "person",
       first: n.first, firstYear: +n.first.slice(0, 4),
       count: n.count, degreeFull: n.degree,
+      clus: n.clus == null ? 0 : n.clus,     // one-mode (projection) clustering (0…1)
+      clus2: n.clus2 == null ? 0 : n.clus2,  // two-mode (bipartite) clustering (0…1)
       comp: n.comp == null ? 0 : n.comp,   // 0 = main component, 1 = 2nd biggest, …
       px: n.px, py: n.py, x: 0, y: 0, ax: 0, ay: 0, cur: 0, placed: false,
     });
@@ -54,22 +56,34 @@
   // People the user has taken out of the network. Empty === the full network.
   const removed = new Set();
 
-  // Component filter (whole-network basis): show only the largest component(s).
-  // compScope is the highest component rank kept — 0 = main component only, 1 = the two
-  // biggest, Infinity = all. Ranks come from build_data.py (0 = giant). Because everyone
-  // in a shared gathering is in the same component, a gathering is always wholly kept or
-  // wholly dropped by this filter, so it folds cleanly into refreshDerived() below.
-  let compScope = Infinity;
+  // Component filter (whole-network basis): show only some connected components.
+  //   "all"  — every component
+  //   "main" — the single largest (component rank 0)
+  //   "top2" — the two biggest (ranks 0 and 1)
+  //   "min4" — every component with 4+ people, dropping smaller islands
+  // Ranks come from build_data.py (0 = giant); COMP_SIZES[rank] is that component's
+  // people count. Because everyone in a shared gathering is in the same component, a
+  // gathering is always wholly kept or wholly dropped, so this folds cleanly into
+  // refreshDerived() below.
+  let compMode = "all";
+  const COMP_SIZES = meta.componentSizes || [];
+  const MIN_PEOPLE = 4;
   function inScope(id) {
     const o = byId.get(id);
-    return !o || o.comp == null || o.comp <= compScope;
+    if (!o || o.comp == null) return true;
+    switch (compMode) {
+      case "main": return o.comp === 0;
+      case "top2": return o.comp <= 1;
+      case "min4": return (COMP_SIZES[o.comp] || 0) >= MIN_PEOPLE;
+      default:     return true;   // "all"
+    }
   }
 
   // Recompute every gathering's surviving guest list and each day's person-person
   // pairs from `removed`. Runs once at startup and again whenever `removed`
   // changes; the persistent event objects (and their positions) stay put.
   function refreshDerived() {
-    const on = removed.size > 0 || compScope !== Infinity;
+    const on = removed.size > 0 || compMode !== "all";
     events.forEach((ev) => {
       ev.pairs = [];
       const seen = new Set();
@@ -101,14 +115,63 @@
   // uses — style.css stays the single source of truth for the palette.
   const YEARS = [1664, 1665, 1666, 1667];
   const YEAR_COLOR = {};
+  // people can be coloured three ways; the fill is chosen by `colorMode`.
+  //   "year"        — by the diary year a person first appears (the default)
+  //   "clustering"  — one-mode (people-projection) clustering coefficient
+  //   "clustering2" — two-mode (bipartite, Latapy) clustering coefficient
+  let colorMode = "year";
+
+  // Clustering colours deliberately focus the palette on the LOW range, because
+  // that is where every well-connected person sits: hubs and brokers have low
+  // clustering, and on both measures they pile into a narrow band near zero while
+  // a second pile of tight little cliques sits up near 1. A plain (or even a rank)
+  // scale leaves all the important nodes near-identical. So for each value we
+  //   1. divide by a fixed CEILING and clamp to [0,1] — the palette spans only
+  //      0…CEILING; anyone at/above the ceiling clusters "highly" and shares the
+  //      brightest colour, then
+  //   2. apply a strong concave gamma (<1) that stretches the crowded low end
+  //      across most of the ramp.
+  // Both measures share the same ceiling; all the resolution is spent on the low,
+  // important end.
+  const CLUS_GAMMA = 0.45;    // < 1 expands the low end; smaller = more extreme
+  const CLUS_CEILING = 0.27;  // coefficient where the palette saturates (both measures)
+
+  let clusRamp = () => "#888";   // low→mid→high interpolator, rebuilt in readPalette
   function readPalette() {
     const css = getComputedStyle(document.documentElement);
     const token = (name) => css.getPropertyValue(name).trim();
     YEARS.forEach((y, i) => { YEAR_COLOR[y] = token(`--year-${i + 1}`); });
     YEAR_COLOR.other = token("--year-other");
+    // clustering ramp: low → mid → high read straight from the CSS tokens, so
+    // style.css stays the single source of truth for the palette (theme included).
+    clusRamp = d3.piecewise(d3.interpolateHcl,
+      [token("--clus-low"), token("--clus-mid"), token("--clus-high")]);
+    paintClusBar();
+  }
+  // fill for one clustering value: divide by the ceiling, clamp into [0,1], then
+  // gamma-expand the low end before hitting the colour ramp.
+  function clusFill(v) {
+    const f = Math.min(1, v / CLUS_CEILING);
+    return clusRamp(Math.pow(f, CLUS_GAMMA));
+  }
+  // paint the legend gradient bar with the SAME transform so it reads honestly:
+  // colour changes fast across the low values and saturates at the ceiling.
+  function paintClusBar() {
+    const el = document.querySelector(".clus-bar");
+    if (!el) return;
+    const stops = [];
+    for (let i = 0; i <= 12; i++) {
+      const f = i / 12;
+      stops.push(clusRamp(Math.pow(f, CLUS_GAMMA)) + " " + Math.round(f * 100) + "%");
+    }
+    el.style.background = "linear-gradient(90deg," + stops.join(",") + ")";
   }
   readPalette();
-  const colorFor = (d) => YEAR_COLOR[d.firstYear] || YEAR_COLOR.other;
+  const colorFor = (d) => {
+    if (colorMode === "clustering") return clusFill(d.clus || 0);
+    if (colorMode === "clustering2") return clusFill(d.clus2 || 0);
+    return YEAR_COLOR[d.firstYear] || YEAR_COLOR.other;
+  };
   // gentle size encoding — sqrt already compresses; small multiplier keeps the
   // busiest hubs from dwarfing everyone else
   const radiusFor = (d) => d.kind === "event"
@@ -458,6 +521,7 @@
         `<div class="tt-row">First appears ${fmtDate(d.first)}</div>` +
         `<div class="tt-row">${d.cur} ${unit}${d.cur === 1 ? "" : "s"} so far · ` +
         `${d.count} gathering${d.count === 1 ? "" : "s"} total</div>` +
+        `<div class="tt-row">Clustering ${d.clus.toFixed(2)} · bipartite ${d.clus2.toFixed(2)}</div>` +
         `<div class="tt-hint">Click to remove from the network</div>`;
     }
     tooltip.classed("hidden", false).html(html);
@@ -649,17 +713,55 @@
   btnPeople.addEventListener("click", () => setMode("people"));
   btnTwo.addEventListener("click", () => setMode("two"));
 
-  // ---- component-scope toggle (All / Main only / Two biggest) ----------------
-  const COMP_SCOPE = { all: Infinity, main: 0, top2: 1 };
+  // ---- colour toggle: year / one-mode clustering / two-mode (bipartite) -------
+  const colorBtns = {
+    year: document.getElementById("color-year"),
+    clustering: document.getElementById("color-clus"),
+    clustering2: document.getElementById("color-clus2"),
+  };
+  const clusLegendTitle = document.getElementById("clus-legend-title");
+  const clusLegendNote = document.getElementById("clus-legend-note");
+  const clusTickLo = document.getElementById("clus-tick-lo");
+  const clusTickMid = document.getElementById("clus-tick-mid");
+  const clusTickHi = document.getElementById("clus-tick-hi");
+  const CLUS_LEGEND = {
+    clustering: {
+      title: "Clustering coefficient",
+      note: "Colour zooms into the low range where the well-connected people sit (one-mode). At or above the ceiling they share the brightest colour.",
+    },
+    clustering2: {
+      title: "Bipartite clustering",
+      note: "Colour zooms into the low range where the well-connected people sit (bipartite, two-mode). At or above the ceiling they share the brightest colour.",
+    },
+  };
+  function setColorMode(m) {
+    if (m === colorMode || !colorBtns[m]) return;
+    colorMode = m;
+    // the legend body switches to the gradient for either clustering mode
+    document.body.classList.toggle("color-clustering", m !== "year");
+    if (m !== "year") {
+      clusLegendTitle.textContent = CLUS_LEGEND[m].title;
+      clusLegendNote.textContent = CLUS_LEGEND[m].note;
+      clusTickLo.textContent = "0";                              // bar left = coefficient 0
+      clusTickMid.textContent = (CLUS_CEILING / 2).toFixed(2);   // bar centre = half the ceiling
+      clusTickHi.textContent = CLUS_CEILING.toFixed(2) + "+";    // bar right = ceiling and above
+    }
+    for (const k in colorBtns) colorBtns[k].classList.toggle("active", k === m);
+    nodeSel.attr("fill", colorFor);      // recolour the people already on stage
+    updateLeaderboard(lbNodes);          // keep the leaderboard dots in step
+  }
+  for (const k of Object.keys(colorBtns)) colorBtns[k].addEventListener("click", () => setColorMode(k));
+
+  // ---- component-scope toggle (All / Main only / Two biggest / 4+ people) -----
   const compBtns = {
     all: document.getElementById("comp-all"),
     main: document.getElementById("comp-main"),
     top2: document.getElementById("comp-top2"),
+    min4: document.getElementById("comp-min4"),
   };
-  function setCompScope(key, refit) {
-    const v = COMP_SCOPE[key];
-    if (v === undefined || v === compScope) return;
-    compScope = v;
+  function setCompMode(key, refit) {
+    if (!compBtns[key] || key === compMode) return;
+    compMode = key;
     for (const k in compBtns) compBtns[k].classList.toggle("active", k === key);
     refreshDerived();          // re-derive gatherings/pairs under the new filter
     measure();                 // gathering anchors depend on their live membership
@@ -667,9 +769,7 @@
     rebuild(index, true);
     if (refit !== false) requestFit(true);
   }
-  compBtns.all.addEventListener("click", () => setCompScope("all"));
-  compBtns.main.addEventListener("click", () => setCompScope("main"));
-  compBtns.top2.addEventListener("click", () => setCompScope("top2"));
+  for (const k of Object.keys(compBtns)) compBtns[k].addEventListener("click", () => setCompMode(k));
 
   // ---- spread control -------------------------------------------------------
   const spreadInput = document.getElementById("spread");
@@ -754,8 +854,10 @@
   const sp = /(?:^#|&)spread=([\d.]+)/.exec(location.hash);
   if (sp) SPREAD = Math.max(1, Math.min(8, +sp[1]));
   if (/(?:^#|&)mode=two/.test(location.hash)) setMode("two");
-  const cm = /(?:^#|&)comp=(all|main|top2)/.exec(location.hash);
-  if (cm && cm[1] !== "all") setCompScope(cm[1], false);   // sets filter before first fit
+  const cm = /(?:^#|&)comp=(all|main|top2|min4)/.exec(location.hash);
+  if (cm && cm[1] !== "all") setCompMode(cm[1], false);   // sets filter before first fit
+  const col = /(?:^#|&)color=(clustering|bipartite)/.exec(location.hash);
+  if (col) setColorMode(col[1] === "bipartite" ? "clustering2" : "clustering");
   applySpread(SPREAD, false);
   rebuild(start, start > 0);
   requestFit(false);   // frame it once the initial layout has settled

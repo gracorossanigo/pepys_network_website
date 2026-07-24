@@ -42,6 +42,13 @@
   --year-other:     #7d8aa5;   /* a person outside the four diary years        */
   --event:          #a880f0;   /* gatherings — squares, so hue + shape differ  */
 
+  /* data — clustering coefficient (0→1) sequential ramp. Viridis stops: a
+     perceptually-uniform, colour-blind-safe scale kept deliberately distinct in
+     hue from the year ramp so the two colour modes never read the same. */
+  --clus-low:       #440154;   /* 0 — a broker (contacts don't know each other) */
+  --clus-mid:       #21918c;
+  --clus-high:      #fde725;   /* 1 — a tight clique                            */
+
   /* graph structure */
   --edge:           #2f4a78;   /* person <-> person                            */
   --edge-hot:       var(--accent);
@@ -82,6 +89,11 @@
   --year-4:         #88c271;
   --year-other:     #5f6b85;
   --event:          #7b4fd0;
+
+  /* clustering ramp — same viridis stops (they read well on a light surface too) */
+  --clus-low:       #440154;
+  --clus-mid:       #21918c;
+  --clus-high:      #fde725;
 
   /* graph structure */
   --edge:           #a9bdd9;
@@ -182,6 +194,19 @@ body {
 .sw.event  { background: var(--event); }
 #legend-event { opacity: .35; }
 body.two-mode #legend-event { opacity: 1; }
+
+/* the legend swaps its body between the two colour modes (year vs. clustering) */
+#legend-clustering { display: none; }
+body.color-clustering #legend-year { display: none; }
+body.color-clustering #legend-clustering { display: block; }
+.clus-bar {
+  width: 150px; height: 10px; border-radius: 5px; margin: 2px 0 3px;
+  background: linear-gradient(90deg, var(--clus-low), var(--clus-mid), var(--clus-high));
+}
+.clus-scale {
+  display: flex; justify-content: space-between; width: 150px;
+  font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
 
 #modebar {
   position: absolute; top: 14px; right: 14px; z-index: 6;

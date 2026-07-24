@@ -221,6 +221,35 @@ def to_unit(x, y):
 PXY = {p: to_unit(x, y) for p, (x, y) in positions.items()}
 
 degree = dict(G.degree())
+
+# --- per-node clustering coefficient (one-mode people projection) -------------
+# The local clustering coefficient of each person in G: of all the pairs among a
+# person's direct contacts, the share that are themselves connected. 0 = none of
+# my contacts know each other (a broker/star centre), 1 = they all do (a tight
+# clique). Unweighted, to match the hop-based layout. Computed once on the WHOLE
+# final network -- like `degree` -- so it is a stable per-node attribute the page
+# colours by, rather than something that re-derives as the timeline scrubs or as
+# people are removed.
+clustering = nx.clustering(G)
+
+# --- two-mode (bipartite) clustering coefficient -----------------------------
+# The projection measure above discards WHICH gatherings tied two people
+# together. The Latapy, Magnien & Vecchio (2008) bipartite coefficient keeps the
+# affiliation structure: for each person it scores how much the gatherings they
+# attend overlap in membership with the gatherings of the people they meet
+# (mode="dot"). This is exactly the measure node_clustering.py writes into the
+# UCINET/NetDraw attribute files, so the website's "bipartite" colouring matches
+# those files. Computed on the full people<->gathering graph, like the others.
+from networkx.algorithms import bipartite as _bip
+B = nx.Graph()
+B.add_nodes_from(first_seen, bipartite=0)                # people
+for _dt in all_dates:
+    for _gid, _members in day_groups[_dt]:
+        B.add_node(_gid, bipartite=1)                    # a gathering (event)
+        for _n in _members:
+            B.add_edge(_n, _gid)
+bclustering = _bip.clustering(B, first_seen, mode="dot")  # per person, 0…1
+
 nodes = []
 for person in sorted(first_seen, key=lambda p: (first_seen[p], p)):
     px, py = PXY[person]
@@ -229,6 +258,8 @@ for person in sorted(first_seen, key=lambda p: (first_seen[p], p)):
         "first": first_seen[person].isoformat(),
         "count": appearances[person],
         "degree": degree.get(person, 0),
+        "clus": round(clustering.get(person, 0.0), 4),    # one-mode projection
+        "clus2": round(bclustering.get(person, 0.0), 4),  # two-mode (bipartite)
         "comp": comp_rank[person],
         "px": px, "py": py,
     })
